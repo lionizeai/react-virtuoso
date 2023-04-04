@@ -247,7 +247,7 @@ function resolveGapValue(property: string, value: string | undefined, log: Log) 
     log(`${property} was not resolved to pixel value correctly`, value, LogLevel.WARN)
   }
   if (value === 'normal') {
-    return 0
+    return parseInt('0')
   }
   return parseInt(value ?? '0', 10)
 }
