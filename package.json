@@ -1,5 +1,5 @@
 {
-  "name": "react-virtuoso",
+  "name": "@lionizeai/react-virtuoso",
   "author": "Petyo Ivanov",
   "type": "module",
   "sideEffects": false,
@@ -104,5 +104,10 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/petyosi/react-virtuoso.git"
+  },
+  {
+  "publishConfig": {
+    "access": "public"
   }
+}
 }
