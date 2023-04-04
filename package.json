@@ -1,6 +1,6 @@
 {
-  "name": "@lionizeai/react-virtuoso",
-  "author": "Petyo Ivanov",
+  "name": "@digitalprezence/react-virtuoso",
+  "author": "Ellis Geary",
   "type": "module",
   "sideEffects": false,
   "version": "0.0.0-development",
