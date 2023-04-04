@@ -182,6 +182,11 @@ export interface TableComponents<Data = unknown, Context = unknown> {
   EmptyPlaceholder?: React.ComponentType<{ context?: Context }>
 
   /**
+   * Set to customize the group item wrapping element. Use only if you would like to render list from elements different than a `div`.
+   */
+  Group?: React.ComponentType<GroupProps & { context?: Context }>
+
+  /**
    * Set to render an item placeholder when the user scrolls fast.  See the `scrollSeek` property for more details.
    */
   ScrollSeekPlaceholder?: React.ComponentType<ScrollSeekPlaceholderProps & { context?: Context }>

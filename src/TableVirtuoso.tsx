@@ -2,7 +2,15 @@ import { systemToComponent } from './react-urx'
 import * as u from './urx'
 import React from 'react'
 import useChangedListContentsSizes from './hooks/useChangedChildSizes'
-import { ComputeItemKey, ItemContent, FixedHeaderContent, FixedFooterContent, TableComponents, TableRootProps } from './interfaces'
+import {
+  ComputeItemKey,
+  ItemContent,
+  FixedHeaderContent,
+  FixedFooterContent,
+  TableComponents,
+  TableRootProps,
+  GroupContent,
+} from './interfaces'
 import { listSystem } from './listSystem'
 import { identity, buildScroller, buildWindowScroller, viewportStyle, contextPropIfNotDomElement } from './Virtuoso'
 import useSize from './hooks/useSize'
@@ -10,12 +18,16 @@ import { correctItemSize } from './utils/correctItemSize'
 import useWindowViewportRectRef from './hooks/useWindowViewportRect'
 import { VirtuosoMockContext } from './utils/context'
 import { TableVirtuosoHandle, TableVirtuosoProps } from './component-interfaces/TableVirtuoso'
+import { positionStickyCssValue } from './utils/positionStickyCssValue'
+
+const GROUP_STYLE = { position: positionStickyCssValue(), zIndex: 1, overflowAnchor: 'none' } as const
 
 const tableComponentPropsSystem = /*#__PURE__*/ u.system(() => {
   const itemContent = u.statefulStream<ItemContent<any, unknown>>((index: number) => <td>Item ${index}</td>)
   const context = u.statefulStream<unknown>(null)
   const fixedHeaderContent = u.statefulStream<FixedHeaderContent>(null)
   const fixedFooterContent = u.statefulStream<FixedFooterContent>(null)
+  const groupContent = u.statefulStream<GroupContent<any>>((index: number) => <td>Group {index}</td>)
   const components = u.statefulStream<TableComponents>({})
   const computeItemKey = u.statefulStream<ComputeItemKey<any, unknown>>(identity)
   const scrollerRef = u.statefulStream<(ref: HTMLElement | Window | null) => void>(u.noop)
@@ -37,11 +49,13 @@ const tableComponentPropsSystem = /*#__PURE__*/ u.system(() => {
   return {
     context,
     itemContent,
+    groupContent,
     fixedHeaderContent,
     fixedFooterContent,
     components,
     computeItemKey,
     scrollerRef,
+    GroupComponent: distinctProp('Group', 'tr'),
     TableComponent: distinctProp('Table', 'table'),
     TableHeadComponent: distinctProp('TableHead', 'thead'),
     TableFooterComponent: distinctProp('TableFoot', 'tfoot'),
@@ -70,7 +84,7 @@ const DefaultFillerRow = ({ height }: { height: number }) => (
   </tr>
 )
 
-const Items = /*#__PURE__*/ React.memo(function VirtuosoItems() {
+const Items = /*#__PURE__*/ React.memo(function VirtuosoItems({ showTopList = false }: { showTopList?: boolean }) {
   const listState = useEmitterValue('listState')
   const sizeRanges = usePublisher('sizeRanges')
   const useWindowScroll = useEmitterValue('useWindowScroll')
@@ -83,6 +97,7 @@ const Items = /*#__PURE__*/ React.memo(function VirtuosoItems() {
   const trackItemSizes = useEmitterValue('trackItemSizes')
   const itemSize = useEmitterValue('itemSize')
   const log = useEmitterValue('log')
+  const groupContent = useEmitterValue('groupContent')
 
   const { callbackRef, ref } = useChangedListContentsSizes(
     sizeRanges,
@@ -106,6 +121,7 @@ const Items = /*#__PURE__*/ React.memo(function VirtuosoItems() {
   const FillerRow = useEmitterValue('FillerRow') || DefaultFillerRow
   const TableBodyComponent = useEmitterValue('TableBodyComponent')!
   const TableRowComponent = useEmitterValue('TableRowComponent')!
+  const GroupComponent = useEmitterValue('GroupComponent')!
   const computeItemKey = useEmitterValue('computeItemKey')
   const isSeeking = useEmitterValue('isSeeking')
   const paddingTopAddition = useEmitterValue('paddingTopAddition')
@@ -117,14 +133,14 @@ const Items = /*#__PURE__*/ React.memo(function VirtuosoItems() {
     return React.createElement(EmptyPlaceholder, contextPropIfNotDomElement(EmptyPlaceholder, context))
   }
 
-  const paddingTop = listState.offsetTop + paddingTopAddition + deviation
+  const paddingTop = listState.offsetTop - listState.topListHeight + paddingTopAddition + deviation
   const paddingBottom = listState.offsetBottom
 
-  const paddingTopEl = paddingTop > 0 ? <FillerRow height={paddingTop} key="padding-top" context={context} /> : null
+  const paddingTopEl = showTopList === false && paddingTop > 0 ? <FillerRow height={paddingTop} key="padding-top" /> : null
 
-  const paddingBottomEl = paddingBottom > 0 ? <FillerRow height={paddingBottom} key="padding-bottom" context={context} /> : null
+  const paddingBottomEl = showTopList === false && paddingBottom > 0 ? <FillerRow height={paddingBottom} key="padding-bottom" /> : null
 
-  const items = listState.items.map((item) => {
+  const items = (showTopList ? listState.topItems : listState.items).map((item) => {
     const index = item.originalIndex!
     const key = computeItemKey(index + firstItemIndex, item.data, context)
 
@@ -137,6 +153,24 @@ const Items = /*#__PURE__*/ React.memo(function VirtuosoItems() {
         type: item.type || 'item',
       })
     }
+
+    if (item.type === 'group') {
+      return React.createElement(
+        GroupComponent,
+        {
+          ...contextPropIfNotDomElement(GroupComponent, context),
+          key,
+          'data-index': index,
+          'data-known-size': item.size,
+          'data-item-index': item.index,
+          style: GROUP_STYLE,
+        },
+
+        // TODO: Figure this out?
+        groupContent(item.index, undefined)
+      )
+    }
+
     return React.createElement(
       TableRowComponent,
       {
@@ -145,12 +179,15 @@ const Items = /*#__PURE__*/ React.memo(function VirtuosoItems() {
         'data-index': index,
         'data-known-size': item.size,
         'data-item-index': item.index,
+        'data-item-group-index': item.groupIndex,
         item: item.data,
         style: { overflowAnchor: 'none' },
       },
       itemContent(item.index, item.data, context)
     )
   })
+
+  if (showTopList) return React.createElement(React.Fragment, {}, [paddingTopEl, ...items, paddingBottomEl])
 
   return React.createElement(
     TableBodyComponent,
@@ -215,6 +252,7 @@ const TableRoot: React.FC<TableRootProps> = /*#__PURE__*/ React.memo(function Ta
   const TheTable = useEmitterValue('TableComponent')
   const TheTHead = useEmitterValue('TableHeadComponent')
   const TheTFoot = useEmitterValue('TableFooterComponent')
+  const showTopList = useEmitterValue('topItemsIndexes').length > 0
 
   const theHead = fixedHeaderContent
     ? React.createElement(
@@ -225,7 +263,8 @@ const TableRoot: React.FC<TableRootProps> = /*#__PURE__*/ React.memo(function Ta
           ref: theadRef,
           ...contextPropIfNotDomElement(TheTHead, context),
         },
-        fixedHeaderContent()
+        fixedHeaderContent(),
+        ...(showTopList ? [<Items key="fixed-header-content" showTopList />] : [])
       )
     : null
   const theFoot = fixedFooterContent
@@ -276,6 +315,7 @@ const {
       topItemCount: 'topItemCount',
       initialTopMostItemIndex: 'initialTopMostItemIndex',
       components: 'components',
+      groupContent: 'groupContent',
       groupCounts: 'groupCounts',
       atBottomThreshold: 'atBottomThreshold',
       atTopThreshold: 'atTopThreshold',
@@ -318,5 +358,9 @@ const Scroller = /*#__PURE__*/ buildScroller({ usePublisher, useEmitterValue, us
 const WindowScroller = /*#__PURE__*/ buildWindowScroller({ usePublisher, useEmitterValue, useEmitter })
 
 export const TableVirtuoso = Table as <ItemData = any, Context = any>(
+  props: TableVirtuosoProps<ItemData, Context> & { ref?: React.Ref<TableVirtuosoHandle> }
+) => React.ReactElement
+
+export const GroupedTableVirtuoso = Table as <ItemData = any, Context = any>(
   props: TableVirtuosoProps<ItemData, Context> & { ref?: React.Ref<TableVirtuosoHandle> }
 ) => React.ReactElement
